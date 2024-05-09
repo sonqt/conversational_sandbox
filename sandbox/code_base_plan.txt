@@ -1,0 +1,14 @@
+utils.py
+    loadPairs(conversation) -> context, reply, label
+    dialogs2utterances() -> utterances, context_len                                             # utterances is then tokenized by utteranceModel.tokenizer()
+                                                                                                # utteranceModel.forward(tokenized_utterances) -> utterance_embeddings 
+    makeContextEncoderInput(utterance_embeddings, context_len) -> context_utt_embeddings        # contextModel.forward(context_utt_embeddings) -> context_embeddings
+    batch(inputs, max_len, batch_size=8)                                                        # Use for both utterances and contexts
+classes files:
+    class utteranceModel: (tokenizer, forward) - following huggingface style
+    class contextModel: (forward)
+    class Forecaster: [init:utteranceModel, contextModel] (forward)
+
+main.py:
+    train()
+    predict(labels = None)

@@ -1,0 +1,17 @@
+processDialog(tokenize utterances) => loadPairs() => train_pairs, val_pairs =>
+dialogBatch2UtteranceBatch() => batch2TrainData() => batchIterator()
+makeContextEncoderInput() => train() => trainIters()
+
+evaluateBatch() => validate()
+evaluateBatch() => evaluateDataset()
+
+
+For training, it is just predict if the next utterance is attack.
+
+# Finally, we can use the forecast-annotated corpus to compute the forecast accuracy.
+# Though we have an individual forecast per utterance, ground truth is at the conversation level:
+# either a conversation derails or it does not. Thus, forecast accuracy is computed as follows:
+#   - True positives are cases that actually derail, for which the model made at least one positive forecast ANYTIME prior to derailment
+#   - False positives are cases that don't derail but for which the model made at least one positive forecast
+#   - False negatives are cases that derail but for which the model made no positive forecasts prior to derailment
+#   - True negatives are cases that don't derail, for which the model made no positive forecasts

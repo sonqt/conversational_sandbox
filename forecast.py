@@ -43,7 +43,7 @@ def set_global_logging_level(level=logging.ERROR, prefices=[""]):
     for name in logging.root.manager.loggerDict:
         if re.match(prefix_re, name):
             logging.getLogger(name).setLevel(level)
-set_global_logging_level(logging.ERROR)
+set_global_logging_level(logging.ERROR) # Avoid printing warning from Tokenizer
 
 def main(args):
     if args.corpus_name == "wikiconv":
@@ -51,8 +51,8 @@ def main(args):
     elif args.corpus_name == "cmv":
         corpus = Corpus(filename=download("conversations-gone-awry-cmv-corpus"))
     else:
-        print("Please input a valid corpus_name [wikiconv, cmv]")
-        return
+        raise Exception("Sorry, no corpus_name matched the input {}.\
+         Please input a valid corpus_name [wikiconv, cmv]".format(args.corpus_name))
     
     # load the corpus into PyTorch-formatted train, val, and test datasets
     dataset = DatasetDict({

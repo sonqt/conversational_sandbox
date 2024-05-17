@@ -2,30 +2,16 @@ import argparse
 import os
 import json
 import torch
-import torch.nn as nn
 from torch import optim
 import torch.nn.functional as F
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import os
-import sys
-import random
-import unicodedata
-import itertools
 from convokit import download, Corpus
 from tqdm import tqdm
 from sklearn.metrics import roc_curve
-
 from datasets import Dataset, DatasetDict
-from transformers import (
-    AutoConfig,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    TrainingArguments,
-    Trainer
-)
-import evaluate
+from transformers import AutoConfig, AutoModelForSequenceClassification
 
 
 def parseargs(arglist):
@@ -120,7 +106,7 @@ def tokenize_context(context, tokenizer, max_len=512):
     tokenized_context = []
     for utterance in context:
         tokenized_context.append(tokenizer.encode(utterance, add_special_tokens=False))
-    def truncate_context(tokenized_context, max_len):
+    def truncate_pad_context(tokenized_context, max_len):
         if sum([len(utterance) for utterance in tokenized_context])\
            + len(tokenized_context) + 1 < max_len:
             final_context = [tokenizer.cls_token_id]
@@ -131,26 +117,29 @@ def tokenize_context(context, tokenizer, max_len=512):
             mask = [1 for _ in range(len(final_context))] + [0 for _ in range(len(padding))]
             input_ids = torch.tensor(final_context + padding)
             mask = torch.tensor(mask)
-            return {"input_ids": input_ids, "attention_mask": mask}
-        
-        while sum([len(utterance) for utterance in tokenized_context])\
-              + len(tokenized_context) + 1 > max_len:
-            truncate_idx = find_max_len(tokenized_context)
-            tokenized_context[truncate_idx] = tokenized_context[truncate_idx][1:]
-        final_context = [tokenizer.cls_token_id]
-        for utterance in tokenized_context:
-            final_context += utterance + [tokenizer.sep_token_id]
+
+        else:        
+            while sum([len(utterance) for utterance in tokenized_context])\
+                + len(tokenized_context) + 1 > max_len:
+                truncate_idx = find_max_len(tokenized_context)
+                tokenized_context[truncate_idx] = tokenized_context[truncate_idx][1:]
+            final_context = [tokenizer.cls_token_id]
+            for utterance in tokenized_context:
+                final_context += utterance + [tokenizer.sep_token_id]
+            
             input_ids = torch.tensor(final_context)
             mask = torch.tensor([1 for _ in range(len(final_context))])
             
         assert input_ids.shape[0] == max_len
-
         return {"input_ids": input_ids, "attention_mask": mask}
-    return truncate_context(tokenized_context, max_len)
+    return truncate_pad_context(tokenized_context, max_len)
 
 @torch.inference_mode
 @torch.no_grad
 def evaluateDataset(dataset, finetuned_model, device, threshold=0.5, temperature=1.0):
+    """
+    Should we batch samples?
+    """
     finetuned_model = finetuned_model.to(device)
     convo_ids = []
     preds = []
@@ -165,41 +154,7 @@ def evaluateDataset(dataset, finetuned_model, device, threshold=0.5, temperature
         preds.append(int(raw_score > threshold))
         scores.append(raw_score)
     return pd.DataFrame({"prediction": preds, "score": scores}, index=convo_ids)
-@torch.inference_mode
-@torch.no_grad
-def batchevaluateDataset(dataset, finetuned_model, device, batch_size=64, threshold=0.5, temperature=1.0):
-    finetuned_model = finetuned_model.to(device)
-    convo_ids = []
-    preds = []
-    scores = []
-    
-    input_ids = []
-    attention_mask = []
-    ids = []
-    for data in tqdm(dataset):
-        input_ids.append(data['input_ids'])
-        attention_mask.append(data['attention_mask'])
-        convo_ids.append(data["id"])
-        # print(data['input_ids'].shape)
-        if len(input_ids) == batch_size:
-            input_ids = torch.stack(input_ids, dim=0).to(device, dtype = torch.long)
-            attention_mask = torch.stack(attention_mask).to(device, dtype = torch.long)
-            outputs = finetuned_model(input_ids=input_ids, attention_mask=attention_mask)
-            probs = F.softmax(outputs.logits / temperature, dim=-1)
-            raw_score = probs[:,1].tolist()
-            scores.extend(raw_score)
-            
-            input_ids = []
-            attention_mask = []
-    if len(input_ids) != 0:
-        input_ids = torch.stack(input_ids, dim=0).to(device, dtype = torch.long)
-        attention_mask = torch.stack(attention_mask).to(device, dtype = torch.long)
-        outputs = finetuned_model(input_ids=input_ids, attention_mask=attention_mask)
-        probs = F.softmax(outputs.logits / temperature, dim=-1)
-        raw_score = probs[:,1].tolist()
-        scores.extend(raw_score)
-        
-    return pd.DataFrame({"score": scores}, index=convo_ids)
+
 def acc_with_threshold(y_true, y_score, thresh):
     y_pred = (y_score > thresh).astype(int)
     return (y_pred == y_true).mean()
@@ -289,9 +244,9 @@ def full_evaluate(args, corpus, tokenized_dataset):
     test_f1 = 2 / (((tp + fp) / tp) + ((tp + fn) / tp))
 
     result_dict = {'accuracy': test_acc, 
-                    'f1': test_f1, 
                     'precision': test_precision,
                     'recall': test_recall,
+                    'f1': test_f1, 
                     'false positive rate': test_fpr}
     result_file = os.path.join(args.output_dir, "result.json")
     with open(result_file, 'w') as f:

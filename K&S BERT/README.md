@@ -2,7 +2,7 @@
 
 I reimplement the derailment forecasting model described in (Kementchedjhieva and Søgaard, 2021).
 
-Command line:
+## Command 
 ```
 MODEL="<model name from hugging face hub here>"
 data="<name of the corpus (must be cmv or wikiconv)>"
@@ -20,4 +20,12 @@ do
         --output_dir "<Your output directory here>/${data}/${MODEL}/seed-${seed}"
 done
 ```
+## The inner working
+Please see section 3.1 in (Kementchedjhieva and Søgaard, 2021) for the description of tokenizing algorithm.
 
+Evaluation:
+    - Train each model over 5 epochs and save a checkpoint after each epoch.
+    - Evaluate each checkpoint on the validation set and choose the best checkpoint based on Accuracy.
+        - Tune the threshold for derailment prediction based on Accuracy.
+    - Evaluate the bect model (checkpoint) on test set.
+    

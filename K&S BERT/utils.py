@@ -103,6 +103,9 @@ def find_max_len(tokens_list):
             index = i
     return index
 def tokenize_context(context, tokenizer, max_len=512):
+    """
+    This function is not efficient. 
+    """
     tokenized_context = []
     for utterance in context:
         tokenized_context.append(tokenizer.encode(utterance, add_special_tokens=False))

@@ -24,6 +24,7 @@ done
 Please see section 3.1 in (Kementchedjhieva and Søgaard, 2021) for the description of tokenizing algorithm.
 
 Evaluation:
+
     1. Train each model over 5 epochs and save a checkpoint after each epoch.
 
     2. Tune the threshold for derailment prediction based on Accuracy.

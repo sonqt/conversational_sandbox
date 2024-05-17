@@ -24,8 +24,11 @@ done
 Please see section 3.1 in (Kementchedjhieva and Søgaard, 2021) for the description of tokenizing algorithm.
 
 Evaluation:
-    - Train each model over 5 epochs and save a checkpoint after each epoch.
-    - Evaluate each checkpoint on the validation set and choose the best checkpoint based on Accuracy.
-        - Tune the threshold for derailment prediction based on Accuracy.
-    - Evaluate the bect model (checkpoint) on test set.
+    1. Train each model over 5 epochs and save a checkpoint after each epoch.
+
+    2. Evaluate each checkpoint on the validation set and choose the best checkpoint based on Accuracy.
+
+        * Tune the threshold for derailment prediction based on Accuracy.
+        
+    3. Evaluate the bect model (checkpoint) on test set.
     

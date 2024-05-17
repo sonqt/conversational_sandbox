@@ -25,7 +25,10 @@ Please see section 3.1 in (Kementchedjhieva and Søgaard, 2021) for the descript
 
 Evaluation:
     1. Train each model over 5 epochs and save a checkpoint after each epoch.
-    2. Evaluate each checkpoint on the validation set and choose the best checkpoint based on Accuracy.
-        * Tune the threshold for derailment prediction based on Accuracy.
-    3. Evaluate the bect model (checkpoint) on test set.
+
+    2. Tune the threshold for derailment prediction based on Accuracy.
+
+    3. Evaluate each checkpoint on the validation set and choose the best checkpoint based on Accuracy.
+        
+    4. Evaluate the bect model (checkpoint) on test set.
     

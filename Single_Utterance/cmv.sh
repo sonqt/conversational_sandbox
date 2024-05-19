@@ -1,8 +1,8 @@
-MODEL="roberta-base"
+MODEL="bert-base-cased"
 data="cmv"
 for seed in 1 2 3 4 5 6 7 8 9 10
 do
-    CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=2 python single_utt.py\
+    CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=3 python single_utt.py\
         --model_name_or_path ${MODEL}\
         --corpus_name ${data}\
         --do_train True\

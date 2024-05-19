@@ -202,8 +202,11 @@ def full_evaluate(args, corpus, tokenized_dataset):
         if accs[best_acc_idx] > best_val_accuracy:
             best_val_accuracy = accs[best_acc_idx]
             best_threshold = thresholds[best_acc_idx]
+            best_model = finetuned_model
     
-    forecasts_df = evaluateDataset(tokenized_dataset["test"], finetuned_model, "cuda", threshold=best_threshold)
+    forecasts_df = evaluateDataset(tokenized_dataset["test"], best_model, "cuda", threshold=best_threshold)
+    prediction_file = os.path.join(args.output_dir, "predictions.csv")
+    forecasts_df.to_csv(prediction_file)
     # We will add a metadata entry to each test-set utterance signifying whether, at the time
     # that CRAFT saw the context *up to and including* that utterance, CRAFT forecasted the
     # conversation would derail. Note that in datasets where the actual toxic comment is

@@ -1,4 +1,4 @@
-MODEL="unitary/unbiased-toxic-roberta"
+MODEL="unitary/toxic-bert"
 data="wikiconv"
 for seed in 1 2 3 4 5
 do

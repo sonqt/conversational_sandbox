@@ -1,8 +1,8 @@
-MODEL="unitary/unbiased-toxic-roberta"
+MODEL="cardiffnlp/twitter-roberta-base-emotion"
 data="wikiconv"
-for seed in 1 2 3 4 5
+for seed in 1 2 3 4 5 6 7 8 9 10
 do
-    CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=5 python forecast.py\
+    CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=5 python ../forecast.py\
         --model_name_or_path ${MODEL}\
         --corpus_name ${data}\
         --do_train True\
@@ -11,5 +11,5 @@ do
         --per_device_batch_size 4\
         --num_train_epochs 5\
         --random_seed ${seed}\
-        --output_dir "/reef/sqt2/BERTCRAFT_adversarial/${data}/${MODEL}/seed-${seed}"
+        --output_dir "/reef/sqt2/BERTCRAFT/${data}/${MODEL}/seed-${seed}"
 done

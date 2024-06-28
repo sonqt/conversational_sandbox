@@ -54,27 +54,45 @@ def main(args):
         raise Exception("Sorry, no corpus_name matched the input {}.\
          Please input a valid corpus_name [wikiconv, cmv]".format(args.corpus_name))
     
-    # load the corpus into PyTorch-formatted train, val, and test datasets
-    dataset = DatasetDict({
-        "train": corpus2dataset(args, corpus, "train", last_only=True),
-        "val": corpus2dataset(args, corpus, "val", last_only=True),
-        "val_for_tuning": corpus2dataset(args, corpus, "val"),
-        "test": corpus2dataset(args, corpus, "test")
-    })
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path, model_max_length=512, truncation_side="left", padding_side="right"
     )
     logging.getLogger("transformers.tokenization_utils").setLevel(logging.ERROR)
 
-    tokenizer_helper = lambda inst: tokenize_context(inst["context"], tokenizer, max_len=tokenizer.model_max_length)
-    tokenized_dataset = dataset.map(tokenizer_helper, remove_columns=["context"], num_proc=20)
+    dataset_dict = {
+        "train": corpus2dataset(args, corpus, "train", last_only=True), 
+        "val": corpus2dataset(args, corpus, "val", last_only=True),
+        "val_for_tuning": corpus2dataset(args, corpus, "val"),
+        "counterfactual_val": corpus2dataset(args, corpus, "val"),
+        "test": corpus2dataset(args, corpus, "test"),
+        "counterfactual_test": corpus2dataset(args, corpus, "test")
+    }
+    def map_data(dataset, tokenizer, counterfactual=False):
+        """
+        dataset: an instance of datasets.Dataset class
+        """
+        # new_columns = tokenize_context(dataset["context"], tokenizer, counterfactual=counterfactual)
+        # for column in new_columns:
+        #     dataset.add_column(name=column, column=new_columns[column])
+        dataset = dataset.map(lambda inst: tokenize_context(inst["context"], tokenizer, counterfactual=counterfactual))
+        dataset.remove_columns("context")
+        return dataset
+    dataset_dict["train"] = map_data(dataset_dict["train"], tokenizer)
+    dataset_dict["val"] = map_data(dataset_dict["val"], tokenizer)
+    dataset_dict["val_for_tuning"] = map_data(dataset_dict["val_for_tuning"], tokenizer)
+    dataset_dict["counterfactual_val"] = map_data(dataset_dict["counterfactual_val"], tokenizer, counterfactual=True)
+    dataset_dict["test"] = map_data(dataset_dict["test"], tokenizer)
+    dataset_dict["counterfactual_test"] = map_data(dataset_dict["counterfactual_test"], tokenizer, counterfactual=True)
+    config = AutoConfig.from_pretrained(args.model_name_or_path)
+
+    # load the corpus into PyTorch-formatted train, val, and test datasets
+    tokenized_dataset = DatasetDict(dataset_dict)
     tokenized_dataset.set_format("torch")
 
-    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=2, problem_type ="single_label_classification")
     model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path,
-                                                                config = config, 
-                                                                ignore_mismatched_sizes = True)
+                                                                ignore_mismatched_sizes=True,
+                                                                num_labels=2)
     
     if args.do_train:
         def compute_metrics(eval_pred):

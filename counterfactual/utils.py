@@ -90,7 +90,7 @@ def corpus2dataset(args, corpus, split=None, last_only=False, shuffle=False):
                 context = [u["text"] for u in dialog[:idx]]
                 dataset_dict["context"].append(context)
                 dataset_dict["id"].append(comment_id)
-                dataset_dict["labels"].append(int(label))
+                dataset_dict["labels"].append(label)
     if shuffle:
         return Dataset.from_dict(dataset_dict).shuffle(seed=2024)
     else:
@@ -102,7 +102,7 @@ def find_max_len(tokens_list):
         if len(tokens) > len(tokens_list[index]):
             index = i
     return index
-def tokenize_context(context, tokenizer, max_len=512):
+def tokenize_context(context, tokenizer, max_len=512, counterfactual=False):
     """
     This function is not efficient. 
     """
@@ -113,9 +113,11 @@ def tokenize_context(context, tokenizer, max_len=512):
         if sum([len(utterance) for utterance in tokenized_context])\
            + len(tokenized_context) + 1 < max_len:
             final_context = [tokenizer.cls_token_id]
-            for utterance in tokenized_context:
-                final_context += utterance + [tokenizer.sep_token_id]
-            
+            for i, utterance in enumerate(tokenized_context):
+                if i < len(tokenized_context)-1 and counterfactual:
+                    final_context += [tokenizer.mask_token_id] * len(utterance) + [tokenizer.sep_token_id]
+                else:
+                    final_context += utterance + [tokenizer.sep_token_id]
             padding = [tokenizer.pad_token_id] * (max_len - len(final_context))
             mask = [1 for _ in range(len(final_context))] + [0 for _ in range(len(padding))]
             input_ids = torch.tensor(final_context + padding)
@@ -127,8 +129,11 @@ def tokenize_context(context, tokenizer, max_len=512):
                 truncate_idx = find_max_len(tokenized_context)
                 tokenized_context[truncate_idx] = tokenized_context[truncate_idx][1:]
             final_context = [tokenizer.cls_token_id]
-            for utterance in tokenized_context:
-                final_context += utterance + [tokenizer.sep_token_id]
+            for i, utterance in enumerate(tokenized_context):
+                if i < len(tokenized_context)-1 and counterfactual:
+                    final_context += [tokenizer.mask_token_id] * len(utterance) + [tokenizer.sep_token_id]
+                else:
+                    final_context += utterance + [tokenizer.sep_token_id]
             
             input_ids = torch.tensor(final_context)
             mask = torch.tensor([1 for _ in range(len(final_context))])
@@ -147,6 +152,8 @@ def evaluateDataset(dataset, finetuned_model, device, threshold=0.5, temperature
     convo_ids = []
     preds = []
     scores = []
+    logit0 = []
+    logit1 = []
     for data in tqdm(dataset):
         input_ids = data['input_ids'].to(device, dtype = torch.long).reshape([1,-1])
         attention_mask = data['attention_mask'].to(device, dtype = torch.long).reshape([1,-1])
@@ -154,9 +161,12 @@ def evaluateDataset(dataset, finetuned_model, device, threshold=0.5, temperature
         probs = F.softmax(outputs.logits / temperature, dim=-1)
         convo_ids.append(data["id"])
         raw_score = probs[0,1].item()
+        raw_logits = [outputs.logits[0,0].item(), outputs.logits[0,1].item()]
         preds.append(int(raw_score > threshold))
         scores.append(raw_score)
-    return pd.DataFrame({"prediction": preds, "score": scores}, index=convo_ids)
+        logit0.append(raw_logits[0])
+        logit1.append(raw_logits[1])
+    return pd.DataFrame({"prediction": preds, "score": scores, "logit0": logit0, "logit1": logit1}, index=convo_ids)
 
 def acc_with_threshold(y_true, y_score, thresh):
     y_pred = (y_score > thresh).astype(int)
@@ -205,8 +215,20 @@ def full_evaluate(args, corpus, tokenized_dataset):
             best_threshold = thresholds[best_acc_idx]
             best_model = finetuned_model
     
+    forecasts_df = evaluateDataset(tokenized_dataset["counterfactual_val"], best_model, "cuda", threshold=best_threshold)
+    prediction_file = os.path.join(args.output_dir, "val_counterfactual_predictions.csv")
+    forecasts_df.to_csv(prediction_file)
+
+    forecasts_df = evaluateDataset(tokenized_dataset["val_for_tuning"], best_model, "cuda", threshold=best_threshold)
+    prediction_file = os.path.join(args.output_dir, "val_predictions.csv")
+    forecasts_df.to_csv(prediction_file)
+
+    forecasts_df = evaluateDataset(tokenized_dataset["counterfactual_test"], best_model, "cuda", threshold=best_threshold)
+    prediction_file = os.path.join(args.output_dir, "test_counterfactual_predictions.csv")
+    forecasts_df.to_csv(prediction_file)
+
     forecasts_df = evaluateDataset(tokenized_dataset["test"], best_model, "cuda", threshold=best_threshold)
-    prediction_file = os.path.join(args.output_dir, "predictions.csv")
+    prediction_file = os.path.join(args.output_dir, "test_predictions.csv")
     forecasts_df.to_csv(prediction_file)
     # We will add a metadata entry to each test-set utterance signifying whether, at the time
     # that CRAFT saw the context *up to and including* that utterance, CRAFT forecasted the

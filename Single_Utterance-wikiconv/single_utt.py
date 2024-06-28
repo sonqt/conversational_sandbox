@@ -1,20 +1,7 @@
-from utils import parseargs, corpus2dataset, loadtraindataset,\
-                 tokenize_context, full_evaluate
-import torch
-import torch.nn as nn
-from torch import optim
-import torch.nn.functional as F
-import pandas as pd
+from utils import parseargs, corpus2dataset, corpus2singledataset,\
+                tokenize_context, full_evaluate
 import numpy as np
-import matplotlib.pyplot as plt
-import os
-import sys
-import random
-import unicodedata
-import itertools
 from convokit import download, Corpus
-from tqdm import tqdm
-from sklearn.metrics import roc_curve
 
 from datasets import Dataset, DatasetDict
 from transformers import (
@@ -46,6 +33,7 @@ def set_global_logging_level(level=logging.ERROR, prefices=[""]):
 set_global_logging_level(logging.ERROR) # Avoid printing warning from Tokenizer
 
 def main(args):
+    assert args.corpus_name == "wikiconv"
     if args.corpus_name == "wikiconv":
         corpus = Corpus(filename=download("conversations-gone-awry-corpus"))
     elif args.corpus_name == "cmv":
@@ -56,8 +44,8 @@ def main(args):
     
     # load the corpus into PyTorch-formatted train, val, and test datasets
     dataset = DatasetDict({
-        "train": corpus2dataset(args, corpus, "train", last_only=True),
-        "val": corpus2dataset(args, corpus, "val", last_only=True),
+        "train": corpus2singledataset(corpus, "train", last_only=True, shuffle=True), 
+        "val": corpus2singledataset(corpus, "val", last_only=True),
         "val_for_tuning": corpus2dataset(args, corpus, "val"),
         "test": corpus2dataset(args, corpus, "test")
     })
@@ -71,10 +59,10 @@ def main(args):
     tokenized_dataset = dataset.map(tokenizer_helper, remove_columns=["context"], num_proc=20)
     tokenized_dataset.set_format("torch")
 
-    config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=2, problem_type ="single_label_classification")
+    config = AutoConfig.from_pretrained(args.model_name_or_path)
     model = AutoModelForSequenceClassification.from_pretrained(args.model_name_or_path,
-                                                                config = config, 
-                                                                ignore_mismatched_sizes = True)
+                                                                ignore_mismatched_sizes=True,
+                                                                num_labels=2)
     
     if args.do_train:
         def compute_metrics(eval_pred):

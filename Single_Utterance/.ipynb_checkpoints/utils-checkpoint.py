@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import pandas as pd
 import numpy as np
 import os
-from convokit import download, Corpus
 from tqdm import tqdm
 from sklearn.metrics import roc_curve
 from datasets import Dataset, DatasetDict
@@ -48,7 +47,7 @@ def processDialog(args, dialog):
         # skip the section header, which does not contain conversational content
         if args.corpus_name == 'wikiconv' and utterance.meta['is_section_header']:
             continue
-        processed.append({"text": utterance.text, "is_attack": int(dialog.meta[label_metadata]), "id": utterance.id})
+        processed.append({"text": utterance.text, "is_attack": int(utterance.meta[utt_label_metadata]) if utt_label_metadata is not None else 0, "id": utterance.id})
     if utt_label_metadata is None:
         # if the dataset does not come with utterance-level labels, we assume that (as in the case of CMV)
         # the only labels are conversation-level and that the actual toxic comment was not included in the
@@ -63,11 +62,16 @@ def corpus2dataset(args, corpus, split=None, last_only=False, shuffle=False):
     from the specified split (train, val, or test).
     Each conversation, which has N comments (not including the section header) will
     get converted into N-1 comment-reply pairs, one pair for each reply 
-    (the first comment does not reply to anything).
+    (the first comment does not reply to anything). 
+
+    The context contain only one utterance before the reply.
+
     Each comment-reply pair is a tuple consisting of the conversational context
     (that is, all comments prior to the reply), the reply itself, the label (that
     is, whether the reply contained a derailment event), and the comment ID of the
     last comment in the context (for later use in re-joining with the ConvoKit corpus).
+
+
     The function returns a list of such pairs.
     """
     dataset_dict = {
@@ -87,10 +91,10 @@ def corpus2dataset(args, corpus, split=None, last_only=False, shuffle=False):
                 # preceding the reply), so we must save that comment ID.
                 comment_id = dialog[idx-1]["id"]
                 # gather as context all utterances preceding the reply
-                context = [u["text"] for u in dialog[:idx]]
+                context = [dialog[idx-1]["text"]]
                 dataset_dict["context"].append(context)
                 dataset_dict["id"].append(comment_id)
-                dataset_dict["labels"].append(int(label))
+                dataset_dict["labels"].append(label)
     if shuffle:
         return Dataset.from_dict(dataset_dict).shuffle(seed=2024)
     else:
@@ -199,7 +203,6 @@ def full_evaluate(args, corpus, tokenized_dataset):
         accs = [acc_with_threshold(val_labels, val_scores, t) for t in thresholds]
         
         best_acc_idx = np.argmax(accs)
-        print("Achieved Accuracy:", accs[best_acc_idx])
         if accs[best_acc_idx] > best_val_accuracy:
             best_val_accuracy = accs[best_acc_idx]
             best_threshold = thresholds[best_acc_idx]
@@ -259,57 +262,3 @@ def full_evaluate(args, corpus, tokenized_dataset):
     with open(result_file, 'w') as f:
         json.dump(result_dict, f)
     return
-
-def loadtraindataset(args, corpus):
-    """
-    Load context-reply pairs from the Corpus, optionally filtering to only conversations
-    from the specified split (train, val, or test).
-    Each conversation, which has N comments (not including the section header) will
-    get converted into N-1 comment-reply pairs, one pair for each reply 
-    (the first comment does not reply to anything).
-    Each comment-reply pair is a tuple consisting of the conversational context
-    (that is, all comments prior to the reply), the reply itself, the label (that
-    is, whether the reply contained a derailment event), and the comment ID of the
-    last comment in the context (for later use in re-joining with the ConvoKit corpus).
-    The function returns a list of such pairs.
-    """
-    dataset_dict = {
-        "context": [],
-        "id": [],
-        "labels": []
-    }
-    hard_neg_path = "/home/sqt2/myExperiment/adversarial_filtering/hard_neg/"
-    hard_neg_path += args.corpus_name + ".json"
-    f = open(hard_neg_path)
-    hard_neg = json.load(f)['data']
-    count_hard_neg = 0
-    for convo in corpus.iter_conversations():
-        # consider only conversations in the specified split of the data
-        if convo.meta['split'] == 'train':
-            dialog = processDialog(args, convo)
-            iter_range = []
-            for idx in range(len(dialog)-1):
-                if dialog[idx]['id'] in hard_neg:
-                    iter_range.append(idx+1)
-            # if iter_range == []:
-            count_hard_neg += len(iter_range)
-            if len(iter_range) == 0:
-                iter_range.append(len(dialog)-1)
-            # else:
-            #     if iter_range[-1] != len(dialog)-1:
-            #         iter_range.append(len(dialog)-1)
-            # iter_range = range(1, len(dialog)) if not last_only else [len(dialog)-1]
-            for idx in iter_range:
-                label = dialog[idx]["is_attack"]
-                # when re-joining with the corpus we want to store forecasts in
-                # the last comment of each context (i.e. the comment directly
-                # preceding the reply), so we must save that comment ID.
-                comment_id = dialog[idx-1]["id"]
-                # gather as context all utterances preceding the reply
-                context = [u["text"] for u in dialog[:idx]]
-                dataset_dict["context"].append(context)
-                dataset_dict["id"].append(comment_id)
-                dataset_dict["labels"].append(label)
-    print(len(dataset_dict["labels"]), sum(dataset_dict["labels"]))
-    print("There are {} hard negative samples.".format(count_hard_neg))
-    return Dataset.from_dict(dataset_dict).shuffle(seed=2024)
